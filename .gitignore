@@ -1,0 +1,17 @@
+# Terraform
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/crash.log
+**/crash.*.log
+
+# Bicep build outputs (generated)
+**/*.bicep.json
+radius/bicep/**/app.json
+radius/bicep/**/env.json
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+*.docx
