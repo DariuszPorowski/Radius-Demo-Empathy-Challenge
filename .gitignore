@@ -15,3 +15,7 @@ radius/bicep/**/env.json
 Thumbs.db
 .vscode/
 *.docx
+
+*.env
+.env.*
+!.env.example
