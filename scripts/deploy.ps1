@@ -38,13 +38,7 @@ param(
     [Parameter()] [switch] $SkipAzureCredential,
     [Parameter()] [switch] $SkipResourceType,
     [Parameter()] [switch] $SkipDeployEnvironment,
-    [Parameter()] [switch] $SkipDeployApp,
-
-    # Use Bicep parameter files (*.bicepparam) as the source of truth by default.
-    # You can disable this and pass parameters explicitly (legacy mode).
-    [Parameter()] [bool] $UseBicepParamFiles = $true,
-    [Parameter()] [string] $EnvParamFile,
-    [Parameter()] [string] $AppParamFile
+    [Parameter()] [switch] $SkipDeployApp
 )
 
 Set-StrictMode -Version Latest
@@ -76,34 +70,6 @@ function Invoke-Logged {
 
     Write-Host "> $toPrint" -ForegroundColor DarkGray
     Invoke-Expression $Command
-}
-
-function Read-BicepParamFile {
-    param([Parameter(Mandatory = $true)] [string] $Path)
-
-    if (-not (Test-Path $Path)) {
-        throw "Parameter file not found: $Path"
-    }
-
-    Assert-Command -Name bicep -InstallHint 'Install the Bicep CLI to use .bicepparam files.'
-
-    $json = & bicep build-params $Path --stdout
-    if ($LASTEXITCODE -ne 0) {
-        throw "bicep build-params failed for $Path"
-    }
-
-    $doc = $json | ConvertFrom-Json -Depth 50
-    if (-not $doc.parameters) {
-        throw "Unexpected bicep build-params output for $Path"
-    }
-
-    $params = @{}
-    foreach ($p in $doc.parameters.PSObject.Properties) {
-        $name = $p.Name
-        $params[$name] = $p.Value.value
-    }
-
-    return $params
 }
 
 function Format-RadParameterArg {
@@ -272,28 +238,8 @@ $EnvName = "$BusinessUnit-$Stage"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 
-# --- Load params from .bicepparam files (default source of truth) ---
-if ($UseBicepParamFiles) {
-    if (-not $EnvParamFile) {
-        $EnvParamFile = Join-Path $repoRoot "params\\$BusinessUnit.env.bicepparam"
-    }
-    if (-not $AppParamFile) {
-        $AppParamFile = Join-Path $repoRoot "params\\$BusinessUnit.$Stage.app.bicepparam"
-    }
-
-    $envFileParams = Read-BicepParamFile -Path $EnvParamFile
-    $appFileParams = Read-BicepParamFile -Path $AppParamFile
-
-    # Allow optional overrides via script parameters, but treat .bicepparam files as the default source.
-    if (-not $PostgresRecipeTemplatePath -and $envFileParams.ContainsKey('postgresRecipeTemplatePath')) { $PostgresRecipeTemplatePath = [string]$envFileParams['postgresRecipeTemplatePath'] }
-    if ($envFileParams.ContainsKey('postgresLocation')) { $PostgresLocation = [string]$envFileParams['postgresLocation'] }
-    if ($envFileParams.ContainsKey('postgresAllowPublicAccess')) { $PostgresAllowPublicAccess = [bool]$envFileParams['postgresAllowPublicAccess'] }
-    if (-not $AzureScope -and $envFileParams.ContainsKey('azureScope')) { $AzureScope = [string]$envFileParams['azureScope'] }
-    if (-not $AciResourceGroupId -and $envFileParams.ContainsKey('aciResourceGroupId')) { $AciResourceGroupId = [string]$envFileParams['aciResourceGroupId'] }
-}
-
 if (-not $PostgresRecipeTemplatePath) {
-    throw 'Missing -PostgresRecipeTemplatePath. Provide it explicitly or set postgresRecipeTemplatePath in the BU env .bicepparam file.'
+    throw 'Missing -PostgresRecipeTemplatePath. Provide the Terraform module source/path for the PostgreSQL recipe.'
 }
 
 # --- Execution ---
@@ -306,19 +252,6 @@ Ensure-ResourceType
 
 switch ($BusinessUnit) {
     'operations' {
-        if ($UseBicepParamFiles) {
-            if (-not $envFileParams.ContainsKey('aciResourceGroupId')) {
-                throw "Missing 'aciResourceGroupId' in $EnvParamFile"
-            }
-            if (-not $envFileParams.ContainsKey('postgresRecipeTemplatePath')) {
-                throw "Missing 'postgresRecipeTemplatePath' in $EnvParamFile"
-            }
-
-            Deploy-Environment -GroupName $GroupName -EnvName $EnvName -EnvBicepPath (Join-Path $repoRoot 'radius\bicep\modules\env-aci.bicep') -EnvParams $envFileParams
-            Deploy-App -GroupName $GroupName -AppBicepPath (Join-Path $repoRoot 'radius\bicep\modules\app-aci.bicep') -AppParams $appFileParams
-            break
-        }
-
         $aciRgId = Get-AciResourceGroupId
         $scope = $AzureScope
         if (-not $scope) { $scope = $aciRgId }
@@ -340,19 +273,6 @@ switch ($BusinessUnit) {
     }
 
     'commercial' {
-        if ($UseBicepParamFiles) {
-            if (-not $envFileParams.ContainsKey('azureScope')) {
-                throw "Missing 'azureScope' in $EnvParamFile"
-            }
-            if (-not $envFileParams.ContainsKey('postgresRecipeTemplatePath')) {
-                throw "Missing 'postgresRecipeTemplatePath' in $EnvParamFile"
-            }
-
-            Deploy-Environment -GroupName $GroupName -EnvName $EnvName -EnvBicepPath (Join-Path $repoRoot 'radius\bicep\modules\env-kubernetes-azure.bicep') -EnvParams $envFileParams
-            Deploy-App -GroupName $GroupName -AppBicepPath (Join-Path $repoRoot 'radius\bicep\modules\app-kubernetes.bicep') -AppParams $appFileParams
-            break
-        }
-
         if (-not $AzureScope) {
             throw 'Commercial requires -AzureScope (resource group ID) for Azure provider scope.'
         }
@@ -374,19 +294,6 @@ switch ($BusinessUnit) {
     }
 
     'retail' {
-        if ($UseBicepParamFiles) {
-            if (-not $envFileParams.ContainsKey('azureScope')) {
-                throw "Missing 'azureScope' in $EnvParamFile"
-            }
-            if (-not $envFileParams.ContainsKey('postgresRecipeTemplatePath')) {
-                throw "Missing 'postgresRecipeTemplatePath' in $EnvParamFile"
-            }
-
-            Deploy-Environment -GroupName $GroupName -EnvName $EnvName -EnvBicepPath (Join-Path $repoRoot 'radius\bicep\modules\env-kubernetes-azure.bicep') -EnvParams $envFileParams
-            Deploy-App -GroupName $GroupName -AppBicepPath (Join-Path $repoRoot 'radius\bicep\modules\app-kubernetes.bicep') -AppParams $appFileParams
-            break
-        }
-
         if (-not $AzureScope) {
             throw 'Retail requires -AzureScope (resource group ID) for Azure provider scope (used by the PostgreSQL Terraform recipe).'
         }

@@ -73,37 +73,6 @@ Recommended options:
 
 See [radius/recipes/azure/postgresql-flex/terraform/README.md](radius/recipes/azure/postgresql-flex/terraform/README.md).
 
-## Recommended: use `.bicepparam` files for values
-
-This repo includes Bicep parameter files under [params/](params/) so you can keep demo inputs in one place.
-
-Edit these files for your subscription/resource groups/repo:
-
-- [params/commercial.env.bicepparam](params/commercial.env.bicepparam)
-- [params/commercial.app.bicepparam](params/commercial.app.bicepparam)
-- [params/operations.env.bicepparam](params/operations.env.bicepparam)
-- [params/operations.app.bicepparam](params/operations.app.bicepparam)
-- [params/retail.env.bicepparam](params/retail.env.bicepparam)
-- [params/retail.app.bicepparam](params/retail.app.bicepparam)
-
-Then deploy with `-UseBicepParamFiles` (the script will pick the right BU files automatically):
-
-Windows PowerShell:
-
-```powershell
-cd X:\gh_personal\radius-project\empathy-challenge
-
-.scripts\deploy.ps1 -BusinessUnit commercial -Stage dev -WorkspaceName demo -UseBicepParamFiles
-```
-
-macOS/Linux:
-
-```bash
-cd /path/to/empathy-challenge
-
-pwsh -File ./scripts/deploy.ps1 -BusinessUnit commercial -Stage dev -WorkspaceName demo -UseBicepParamFiles
-```
-
 ### 3) Azure scope / resource group IDs
 
 You will need Azure Resource Group IDs:
@@ -186,13 +155,20 @@ Requires:
 - `-AciResourceGroupId` or `-AciResourceGroupName`
 - Azure credentials (SP env vars)
 
+Minimum required flags:
+
+- `-BusinessUnit operations`
+- `-AciResourceGroupId` (or `-AciResourceGroupName`)
+- `-PostgresRecipeTemplatePath`
+
 Windows PowerShell:
 
 ```powershell
 $aciRgId = "/subscriptions/<subId>/resourceGroups/operations"
 $recipePath = ".\radius\recipes\azure\postgresql-flex\terraform"
 
-.\scripts\deploy.ps1 -BusinessUnit operations -Stage dev -WorkspaceName demo `
+# Stage defaults to 'dev' and WorkspaceName defaults to 'demo'
+.\scripts\deploy.ps1 -BusinessUnit operations `
   -AciResourceGroupId $aciRgId `
   -PostgresRecipeTemplatePath $recipePath
 
@@ -205,7 +181,7 @@ macOS/Linux:
 aciRgId="/subscriptions/<subId>/resourceGroups/operations"
 recipePath="./radius/recipes/azure/postgresql-flex/terraform"
 
-pwsh -File ./scripts/deploy.ps1 -BusinessUnit operations -Stage dev -WorkspaceName demo \
+pwsh -File ./scripts/deploy.ps1 -BusinessUnit operations \
   -AciResourceGroupId "$aciRgId" \
   -PostgresRecipeTemplatePath "$recipePath"
 
@@ -217,7 +193,8 @@ Shortcut wrapper (Operations only): [scripts/deploy-aci.ps1](scripts/deploy-aci.
 Windows PowerShell:
 
 ```powershell
-.\scripts\deploy-aci.ps1 -Stage dev -WorkspaceName demo -AciResourceGroupId "/subscriptions/<subId>/resourceGroups/operations" -PostgresRecipeTemplatePath "X:\...\terraform"
+# Stage defaults to 'dev' and WorkspaceName defaults to 'demo'
+.\scripts\deploy-aci.ps1 -AciResourceGroupId "/subscriptions/<subId>/resourceGroups/operations" -PostgresRecipeTemplatePath "X:\...\terraform"
 ```
 
 ### Retail Banking (local Kubernetes)
@@ -227,13 +204,20 @@ Requires:
 - Kubernetes cluster/context (can be local: kind/minikube/docker-desktop)
 - `-AzureScope` (because the PostgreSQL recipe is Azure-backed)
 
+Minimum required flags:
+
+- `-BusinessUnit retail`
+- `-AzureScope`
+- `-PostgresRecipeTemplatePath`
+
 Windows PowerShell:
 
 ```powershell
 $azureScope = "/subscriptions/<subId>/resourceGroups/retail"
 $recipePath = ".\radius\recipes\azure\postgresql-flex\terraform"
 
-.\scripts\deploy.ps1 -BusinessUnit retail -Stage dev -WorkspaceName demo `
+# Stage defaults to 'dev' and WorkspaceName defaults to 'demo'
+.\scripts\deploy.ps1 -BusinessUnit retail `
   -AzureScope $azureScope `
   -PostgresRecipeTemplatePath $recipePath
 
@@ -246,7 +230,7 @@ macOS/Linux:
 azureScope="/subscriptions/<subId>/resourceGroups/retail"
 recipePath="./radius/recipes/azure/postgresql-flex/terraform"
 
-pwsh -File ./scripts/deploy.ps1 -BusinessUnit retail -Stage dev -WorkspaceName demo \
+pwsh -File ./scripts/deploy.ps1 -BusinessUnit retail \
   -AzureScope "$azureScope" \
   -PostgresRecipeTemplatePath "$recipePath"
 

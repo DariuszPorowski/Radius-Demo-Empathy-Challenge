@@ -20,10 +20,7 @@ param(
     [Parameter()] [switch] $SkipAzureCredential,
     [Parameter()] [switch] $SkipResourceType,
     [Parameter()] [switch] $SkipDeployEnvironment,
-    [Parameter()] [switch] $SkipDeployApp,
-    [Parameter()] [switch] $UseBicepParamFiles,
-    [Parameter()] [string] $EnvParamFile,
-    [Parameter()] [string] $AppParamFile
+    [Parameter()] [switch] $SkipDeployApp
 )
 
 Set-StrictMode -Version Latest
@@ -39,4 +36,4 @@ if (-not (Test-Path $deploy)) {
     -PostgresRecipeTemplatePath $PostgresRecipeTemplatePath -PostgresLocation $PostgresLocation -PostgresAllowPublicAccess $PostgresAllowPublicAccess `
     -Image $Image -ContainerPort $ContainerPort -AzureClientId $AzureClientId -AzureClientSecret $AzureClientSecret -AzureTenantId $AzureTenantId `
     -SkipInstallRadius:$SkipInstallRadius -ReinstallRadius:$ReinstallRadius -SkipAzureCredential:$SkipAzureCredential -SkipResourceType:$SkipResourceType `
-    -SkipDeployEnvironment:$SkipDeployEnvironment -SkipDeployApp:$SkipDeployApp -UseBicepParamFiles:$UseBicepParamFiles -EnvParamFile $EnvParamFile -AppParamFile $AppParamFile
+    -SkipDeployEnvironment:$SkipDeployEnvironment -SkipDeployApp:$SkipDeployApp

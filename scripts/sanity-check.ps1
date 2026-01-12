@@ -60,22 +60,6 @@ if (-not $SkipBicep) {
     bicep build (Join-Path $repoRoot 'radius\bicep\modules\app-kubernetes.bicep') --stdout | Out-Null
     bicep build (Join-Path $repoRoot 'radius\bicep\modules\app-aci.bicep') --stdout | Out-Null
 
-    Write-Step 'Bicep parameter file check'
-    bicep build-params (Join-Path $repoRoot 'params\commercial.env.bicepparam') --stdout | Out-Null
-    bicep build-params (Join-Path $repoRoot 'params\commercial.dev.app.bicepparam') --stdout | Out-Null
-    bicep build-params (Join-Path $repoRoot 'params\commercial.test.app.bicepparam') --stdout | Out-Null
-    bicep build-params (Join-Path $repoRoot 'params\commercial.prod.app.bicepparam') --stdout | Out-Null
-
-    bicep build-params (Join-Path $repoRoot 'params\operations.env.bicepparam') --stdout | Out-Null
-    bicep build-params (Join-Path $repoRoot 'params\operations.dev.app.bicepparam') --stdout | Out-Null
-    bicep build-params (Join-Path $repoRoot 'params\operations.test.app.bicepparam') --stdout | Out-Null
-    bicep build-params (Join-Path $repoRoot 'params\operations.prod.app.bicepparam') --stdout | Out-Null
-
-    bicep build-params (Join-Path $repoRoot 'params\retail.env.bicepparam') --stdout | Out-Null
-    bicep build-params (Join-Path $repoRoot 'params\retail.dev.app.bicepparam') --stdout | Out-Null
-    bicep build-params (Join-Path $repoRoot 'params\retail.test.app.bicepparam') --stdout | Out-Null
-    bicep build-params (Join-Path $repoRoot 'params\retail.prod.app.bicepparam') --stdout | Out-Null
-
     Write-Host 'OK' -ForegroundColor Green
 }
 

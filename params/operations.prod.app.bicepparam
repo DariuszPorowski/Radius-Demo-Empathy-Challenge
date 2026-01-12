@@ -1,6 +1,0 @@
-using '../radius/bicep/modules/app-aci.bicep'
-
-param environment = 'operations-prod'
-
-param image = 'ghcr.io/radius-project/samples/demo:latest'
-param containerPort = 3000
