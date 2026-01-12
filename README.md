@@ -22,16 +22,27 @@ You need:
 - A working Kubernetes cluster/context (for Commercial + Retail)
 - Azure subscription + an Azure Service Principal for Radius to provision Azure resources
 - Tools:
+  - `task` (Taskfile runner) (recommended)
   - `rad` (Radius CLI)
   - `kubectl`
   - `az` (Azure CLI)
   - `terraform`
-  - `bicep` (optional, only for `sanity-check.ps1`)
+  - `bicep` (optional)
   - PowerShell:
     - Windows: built-in PowerShell 7+ recommended
     - macOS/Linux: `pwsh` (PowerShell)
 
 ## One-time inputs you must provide
+
+## Recommended runner: Taskfile
+
+This repo includes a cross-platform [Taskfile.yml](Taskfile.yml) so you can run common operations consistently on Windows/macOS/Linux.
+
+Quick start:
+
+- Copy [.env.example](.env.example) to `.env` and fill in values (optional but recommended)
+- List tasks: `task --list`
+- Run a task: `task <task-name>`
 
 ## One-time Azure bootstrap (recommended)
 
@@ -40,33 +51,36 @@ This demo requires Azure resource groups and a Service Principal with permission
 - Azure PostgreSQL Flexible Server (via the Terraform recipe)
 - Azure Container Instances (for the Operations/ACI extra credit)
 
-Recommended one-time setup script:
+Recommended one-time setup (Taskfile):
 
-Windows PowerShell:
-
-```powershell
-./scripts/azure-bootstrap.ps1 -SubscriptionId "<subId>"
+```bash
+task azure:bootstrap SUBSCRIPTION_ID=<subId>
 ```
 
 Optional: also create a simple AKS cluster for the Commercial (Kubernetes on Azure) scenario:
 
-```powershell
-./scripts/azure-bootstrap.ps1 -SubscriptionId "<subId>" -CreateAks
+```bash
+task azure:bootstrap SUBSCRIPTION_ID=<subId> CREATE_AKS=true
 ```
 
 This will (idempotently):
 
 - Register required resource providers: `Microsoft.DBforPostgreSQL`, `Microsoft.ContainerInstance`
 - Create resource groups: `commercial`, `retail`, `operations`
-- Create a Service Principal and assign `Contributor` on those resource groups
 
-When `-CreateAks` is set, it also:
+Create the Service Principal separately (recommended so you intentionally capture the secret output):
+
+```bash
+task azure:sp:create SUBSCRIPTION_ID=<subId>
+```
+
+When `CREATE_AKS=true` is set, it also:
 
 - Registers `Microsoft.ContainerService`
 - Creates an AKS cluster (default name `radius-demo-aks` in the `commercial` RG)
-- Fetches kubeconfig via `az aks get-credentials`
+- Fetches kubeconfig via `az aks get-credentials` (can be disabled with `GET_AKS_CREDENTIALS=false`)
 
-If you can’t create service principals or role assignments in your tenant, run with `-SkipServicePrincipal` and ask an admin to provide you:
+If you can’t create service principals or role assignments in your tenant, ask an admin to provide you:
 
 - `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`
 - Contributor (or equivalent) permissions on the required resource groups
@@ -122,31 +136,12 @@ Resource group ID format:
 
 - `/subscriptions/<subId>/resourceGroups/<rgName>`
 
-## Quick sanity check (optional, but recommended)
-
-Windows PowerShell:
-
-```powershell
-.\scripts\sanity-check.ps1
-```
-
-macOS/Linux:
-
-```bash
-pwsh -File ./scripts/sanity-check.ps1
-```
-
 ## Demo: Deploy a single environment + app
 
-All deployments use the same entrypoint:
+Deployments are run directly via Taskfile (no wrapper scripts). Tasks will:
 
-- [scripts/deploy.ps1](scripts/deploy.ps1)
-
-It will (by default):
-
-- Ensure `az login` is present
 - Create a Radius workspace on Kubernetes (`rad workspace create kubernetes`)
-- Install Radius into the cluster (`rad install kubernetes`) unless you skip it
+- Optionally install Radius (`rad install kubernetes`)
 - Register Azure SP credentials into Radius (`rad credential register azure sp`)
 - Register the custom resource type from [radius/resource-types/postgreSqlDatabases.yaml](radius/resource-types/postgreSqlDatabases.yaml)
 - Deploy the target BU environment Bicep
@@ -159,30 +154,14 @@ Requires:
 - Kubernetes cluster/context
 - `-AzureScope` (Azure resource group ID)
 
-Windows PowerShell:
-
-```powershell
-$azureScope = "/subscriptions/<subId>/resourceGroups/commercial"
-$recipePath = ".\radius\recipes\azure\postgresql-flex\terraform"
-
-.\scripts\deploy.ps1 -BusinessUnit commercial -Stage dev -WorkspaceName demo `
-  -AzureScope $azureScope `
-  -PostgresRecipeTemplatePath $recipePath
-
-rad app status --workspace demo --group commercial
-```
-
-macOS/Linux:
+Using Taskfile (recommended):
 
 ```bash
-azureScope="/subscriptions/<subId>/resourceGroups/commercial"
-recipePath="./radius/recipes/azure/postgresql-flex/terraform"
+task deploy:commercial \
+  COMMERCIAL_AZURE_SCOPE="/subscriptions/<subId>/resourceGroups/commercial" \
+  POSTGRES_RECIPE_TEMPLATE_PATH="./radius/recipes/azure/postgresql-flex/terraform"
 
-pwsh -File ./scripts/deploy.ps1 -BusinessUnit commercial -Stage dev -WorkspaceName demo \
-  -AzureScope "$azureScope" \
-  -PostgresRecipeTemplatePath "$recipePath"
-
-rad app status --workspace demo --group commercial
+task status:commercial
 ```
 
 ### Operations (ACI) — extra credit
@@ -199,40 +178,14 @@ Minimum required flags:
 - `-AciResourceGroupId` (or `-AciResourceGroupName`)
 - `-PostgresRecipeTemplatePath`
 
-Windows PowerShell:
-
-```powershell
-$aciRgId = "/subscriptions/<subId>/resourceGroups/operations"
-$recipePath = ".\radius\recipes\azure\postgresql-flex\terraform"
-
-# Stage defaults to 'dev' and WorkspaceName defaults to 'demo'
-.\scripts\deploy.ps1 -BusinessUnit operations `
-  -AciResourceGroupId $aciRgId `
-  -PostgresRecipeTemplatePath $recipePath
-
-rad app status --workspace demo --group operations
-```
-
-macOS/Linux:
+Using Taskfile (recommended):
 
 ```bash
-aciRgId="/subscriptions/<subId>/resourceGroups/operations"
-recipePath="./radius/recipes/azure/postgresql-flex/terraform"
+task deploy:operations \
+  OPERATIONS_ACI_RG_ID="/subscriptions/<subId>/resourceGroups/operations" \
+  POSTGRES_RECIPE_TEMPLATE_PATH="./radius/recipes/azure/postgresql-flex/terraform"
 
-pwsh -File ./scripts/deploy.ps1 -BusinessUnit operations \
-  -AciResourceGroupId "$aciRgId" \
-  -PostgresRecipeTemplatePath "$recipePath"
-
-rad app status --workspace demo --group operations
-```
-
-Shortcut wrapper (Operations only): [scripts/deploy-aci.ps1](scripts/deploy-aci.ps1)
-
-Windows PowerShell:
-
-```powershell
-# Stage defaults to 'dev' and WorkspaceName defaults to 'demo'
-.\scripts\deploy-aci.ps1 -AciResourceGroupId "/subscriptions/<subId>/resourceGroups/operations" -PostgresRecipeTemplatePath "X:\...\terraform"
+task status:operations
 ```
 
 ### Retail Banking (local Kubernetes)
@@ -248,44 +201,29 @@ Minimum required flags:
 - `-AzureScope`
 - `-PostgresRecipeTemplatePath`
 
-Windows PowerShell:
-
-```powershell
-$azureScope = "/subscriptions/<subId>/resourceGroups/retail"
-$recipePath = ".\radius\recipes\azure\postgresql-flex\terraform"
-
-# Stage defaults to 'dev' and WorkspaceName defaults to 'demo'
-.\scripts\deploy.ps1 -BusinessUnit retail `
-  -AzureScope $azureScope `
-  -PostgresRecipeTemplatePath $recipePath
-
-rad app status --workspace demo --group retail
-```
-
-macOS/Linux:
+Using Taskfile (recommended):
 
 ```bash
-azureScope="/subscriptions/<subId>/resourceGroups/retail"
-recipePath="./radius/recipes/azure/postgresql-flex/terraform"
+task deploy:retail \
+  RETAIL_AZURE_SCOPE="/subscriptions/<subId>/resourceGroups/retail" \
+  POSTGRES_RECIPE_TEMPLATE_PATH="./radius/recipes/azure/postgresql-flex/terraform"
 
-pwsh -File ./scripts/deploy.ps1 -BusinessUnit retail \
-  -AzureScope "$azureScope" \
-  -PostgresRecipeTemplatePath "$recipePath"
-
-rad app status --workspace demo --group retail
+task status:retail
 ```
 
 ## Switching stages (test/prod)
 
-Just change `-Stage`:
+Use either `STAGE=<dev|test|prod>` or the convenience tasks:
 
-- `-Stage test` deploys `*-test`
-- `-Stage prod` deploys `*-prod`
+- `task deploy:commercial:test`
+- `task deploy:commercial:prod`
 
 Example:
 
-```powershell
-.\scripts\deploy.ps1 -BusinessUnit commercial -Stage test -WorkspaceName demo -AzureScope "/subscriptions/<subId>/resourceGroups/commercial" -PostgresRecipeTemplatePath "X:\...\terraform"
+```bash
+task deploy:commercial STAGE=test \
+  COMMERCIAL_AZURE_SCOPE="/subscriptions/<subId>/resourceGroups/commercial" \
+  POSTGRES_RECIPE_TEMPLATE_PATH="./radius/recipes/azure/postgresql-flex/terraform"
 ```
 
 ## Finding the gateway endpoint
@@ -304,21 +242,10 @@ Cleanup deletes (by default): app, group, and workspace.
 
 Windows PowerShell:
 
-```powershell
-# Commercial
-.\scripts\cleanup.ps1 -BusinessUnit commercial -WorkspaceName demo
-
-# Retail
-.\scripts\cleanup.ps1 -BusinessUnit retail -WorkspaceName demo
-
-# Operations (ACI)
-.\scripts\cleanup-aci.ps1 -WorkspaceName demo
-```
-
-macOS/Linux:
+Using Taskfile (recommended):
 
 ```bash
-pwsh -File ./scripts/cleanup.ps1 -BusinessUnit commercial -WorkspaceName demo
-pwsh -File ./scripts/cleanup.ps1 -BusinessUnit retail -WorkspaceName demo
-pwsh -File ./scripts/cleanup-aci.ps1 -WorkspaceName demo
+task cleanup:commercial
+task cleanup:retail
+task cleanup:operations
 ```

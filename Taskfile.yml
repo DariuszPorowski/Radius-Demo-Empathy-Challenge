@@ -1,0 +1,315 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+#
+# docs: https://taskfile.dev
+#
+# --- Windows ---
+# winget install Task.Task
+#
+# --- Linux ---
+# sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
+# echo 'command -v task >/dev/null || export PATH="$PATH:$HOME/.local/bin"' >> ~/.profile
+# source ~/.profile
+#
+# --- macOS ---
+# brew install go-task/tap/go-task
+---
+version: "3"
+
+# Uses the Task runner: https://taskfile.dev/
+# Cross-platform approach:
+# - Prefer direct CLI commands (`rad`, `az`, `kubectl`, `terraform`, `bicep`)
+# - Support .env files via Task's native `dotenv` feature
+# - Keep tasks small and composable
+
+dotenv: [".env"]
+
+vars:
+  # Defaults.
+  WORKSPACE: '{{.WORKSPACE | default "demo"}}'
+  STAGE: '{{.STAGE | default "dev"}}'
+
+  # Optional: kube context override (passed to rad workspace create; used by kubectl config use-context if set)
+  KUBE_CONTEXT: '{{.KUBE_CONTEXT | default ""}}'
+
+  # Default app name used by cleanup tasks
+  APP_NAME: '{{.APP_NAME | default "todo-app"}}'
+
+  # Common demo defaults (can be overridden per task call).
+  POSTGRES_RECIPE_TEMPLATE_PATH: >-
+    {{.POSTGRES_RECIPE_TEMPLATE_PATH | default
+    "./radius/recipes/azure/postgresql-flex/terraform"}}
+
+  # Azure bootstrap defaults.
+  SUBSCRIPTION_ID: '{{.SUBSCRIPTION_ID | default ""}}'
+  RG_LOCATION: '{{.RG_LOCATION | default "eastus"}}'
+  SP_NAME: '{{.SP_NAME | default "radius-demo-sp"}}'
+  ROLE: '{{.ROLE | default "Contributor"}}'
+  CREATE_AKS: '{{.CREATE_AKS | default "false"}}'
+  GET_AKS_CREDENTIALS: '{{.GET_AKS_CREDENTIALS | default "true"}}'
+  AKS_CLUSTER_NAME: '{{.AKS_CLUSTER_NAME | default "radius-demo-aks"}}'
+  AKS_NODE_COUNT: '{{.AKS_NODE_COUNT | default "1"}}'
+  AKS_NODE_VM_SIZE: '{{.AKS_NODE_VM_SIZE | default "Standard_DS2_v2"}}'
+
+  # Scopes (resource group IDs). Typically output by azure:bootstrap.
+  COMMERCIAL_AZURE_SCOPE: '{{.COMMERCIAL_AZURE_SCOPE | default ""}}'
+  RETAIL_AZURE_SCOPE: '{{.RETAIL_AZURE_SCOPE | default ""}}'
+  OPERATIONS_ACI_RG_ID: '{{.OPERATIONS_ACI_RG_ID | default ""}}'
+
+  # Image overrides (optional)
+  IMAGE: '{{.IMAGE | default "ghcr.io/radius-project/samples/demo:latest"}}'
+  CONTAINER_PORT: '{{.CONTAINER_PORT | default "3000"}}'
+
+  # Optional behavior toggles
+  SKIP_RADIUS_INSTALL: '{{.SKIP_RADIUS_INSTALL | default "false"}}'
+  REINSTALL_RADIUS: '{{.REINSTALL_RADIUS | default "false"}}'
+  SKIP_AZURE_CREDENTIAL: '{{.SKIP_AZURE_CREDENTIAL | default "false"}}'
+  SKIP_RESOURCE_TYPE: '{{.SKIP_RESOURCE_TYPE | default "false"}}'
+
+output: prefixed
+
+silent: false
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  azure:bootstrap:
+    desc: One-time Azure bootstrap (RGs, provider registration, SP; optionally AKS)
+    summary: |
+      Creates Azure prerequisites for this demo.
+
+      Examples:
+        task azure:bootstrap SUBSCRIPTION_ID=<subId>
+        task azure:bootstrap SUBSCRIPTION_ID=<subId> CREATE_AKS=true
+
+      Variables (can come from .env):
+        SUBSCRIPTION_ID, RG_LOCATION, SP_NAME, ROLE, CREATE_AKS
+    requires:
+      vars: [SUBSCRIPTION_ID]
+    cmds:
+      - az account set --subscription "{{.SUBSCRIPTION_ID}}"
+      - az provider register --namespace Microsoft.DBforPostgreSQL
+      - az provider register --namespace Microsoft.ContainerInstance
+      - cmd: az provider register --namespace Microsoft.ContainerService
+        silent: true
+        ignore_error: true
+      - az group create --name commercial --location "{{.RG_LOCATION}}" -o none
+      - az group create --name retail --location "{{.RG_LOCATION}}" -o none
+      - az group create --name operations --location "{{.RG_LOCATION}}" -o none
+      - cmd: >-
+          {{if eq .CREATE_AKS "true"}}az aks create --name "{{.AKS_CLUSTER_NAME}}" --resource-group commercial --location "{{.RG_LOCATION}}" --node-count {{.AKS_NODE_COUNT}} --node-vm-size "{{.AKS_NODE_VM_SIZE}}" --generate-ssh-keys --enable-managed-identity -o none{{else}}echo Skipping AKS (set CREATE_AKS=true to enable){{end}}
+        ignore_error: true
+      - cmd: >-
+          {{if and (eq .CREATE_AKS "true") (eq .GET_AKS_CREDENTIALS "true")}}az aks get-credentials --name "{{.AKS_CLUSTER_NAME}}" --resource-group commercial --overwrite-existing{{else}}echo Skipping AKS kubeconfig (set GET_AKS_CREDENTIALS=true){{end}}
+        ignore_error: true
+      - cmd: >-
+          echo Commercial AzureScope:     /subscriptions/{{.SUBSCRIPTION_ID}}/resourceGroups/commercial
+      - cmd: >-
+          echo Retail AzureScope:         /subscriptions/{{.SUBSCRIPTION_ID}}/resourceGroups/retail
+      - cmd: >-
+          echo Operations AciResourceGroupId: /subscriptions/{{.SUBSCRIPTION_ID}}/resourceGroups/operations
+
+  azure:sp:create:
+    desc: Create an Azure Service Principal and assign RBAC to the demo resource groups
+    summary: |
+      WARNING: Azure CLI returns the client secret only once. Capture the JSON output.
+
+      Requires:
+        SUBSCRIPTION_ID
+
+      Example:
+        task azure:sp:create SUBSCRIPTION_ID=<subId>
+    requires:
+      vars: [SUBSCRIPTION_ID]
+    cmds:
+      - az account set --subscription "{{.SUBSCRIPTION_ID}}"
+      - cmd: >-
+          az ad sp create-for-rbac --name "{{.SP_NAME}}" --role "{{.ROLE}}" --scopes
+          "/subscriptions/{{.SUBSCRIPTION_ID}}/resourceGroups/commercial"
+          "/subscriptions/{{.SUBSCRIPTION_ID}}/resourceGroups/retail"
+          "/subscriptions/{{.SUBSCRIPTION_ID}}/resourceGroups/operations" -o json
+
+  deploy:commercial:
+    desc: Deploy Commercial environment + app
+    summary: |
+      Requires COMMERCIAL_AZURE_SCOPE and POSTGRES_RECIPE_TEMPLATE_PATH.
+
+      Example:
+        task deploy:commercial COMMERCIAL_AZURE_SCOPE="/subscriptions/<subId>/resourceGroups/commercial"
+    requires:
+      vars: [COMMERCIAL_AZURE_SCOPE, POSTGRES_RECIPE_TEMPLATE_PATH]
+    cmds:
+      - cmd: '{{if ne .KUBE_CONTEXT ""}}kubectl config use-context "{{.KUBE_CONTEXT}}"{{else}}echo Using current kubectl context{{end}}'
+      - cmd: >-
+          rad workspace create kubernetes "{{.WORKSPACE}}" --force{{if ne .KUBE_CONTEXT ""}} --context "{{.KUBE_CONTEXT}}"{{end}}
+      - cmd: >-
+          {{if eq .SKIP_RADIUS_INSTALL "true"}}echo Skipping rad install (SKIP_RADIUS_INSTALL=true){{else}}rad install kubernetes{{if eq .REINSTALL_RADIUS "true"}} --reinstall{{end}}{{end}}
+      - cmd: >-
+          {{if eq .SKIP_AZURE_CREDENTIAL "true"}}echo Skipping Azure credential register (SKIP_AZURE_CREDENTIAL=true){{else}}rad credential register azure sp --client-id "{{.AZURE_CLIENT_ID}}" --client-secret "{{.AZURE_CLIENT_SECRET}}" --tenant-id "{{.AZURE_TENANT_ID}}" --workspace "{{.WORKSPACE}}"{{end}}
+      - rad group create commercial --workspace "{{.WORKSPACE}}"
+      - cmd: >-
+          {{if eq .SKIP_RESOURCE_TYPE "true"}}echo Skipping resource type register (SKIP_RESOURCE_TYPE=true){{else}}rad resource-type create postgreSqlDatabases --from-file "./radius/resource-types/postgreSqlDatabases.yaml" --workspace "{{.WORKSPACE}}"{{end}}
+      - cmd: >-
+          rad deploy "./radius/bicep/commercial-aks/env.bicep" --workspace "{{.WORKSPACE}}" --group commercial
+          --parameters azureScope="{{.COMMERCIAL_AZURE_SCOPE}}"
+          --parameters postgresRecipeTemplatePath="{{.POSTGRES_RECIPE_TEMPLATE_PATH}}"
+      - cmd: >-
+          rad deploy "./radius/bicep/commercial-aks/app.bicep" --workspace "{{.WORKSPACE}}" --group commercial
+          --parameters environment="commercial-{{.STAGE}}"
+          --parameters image="{{.IMAGE}}"
+          --parameters containerPort={{.CONTAINER_PORT}}
+
+  deploy:retail:
+    desc: Deploy Retail environment + app
+    summary: |
+      Requires RETAIL_AZURE_SCOPE and POSTGRES_RECIPE_TEMPLATE_PATH.
+
+      Example:
+        task deploy:retail RETAIL_AZURE_SCOPE="/subscriptions/<subId>/resourceGroups/retail"
+    requires:
+      vars: [RETAIL_AZURE_SCOPE, POSTGRES_RECIPE_TEMPLATE_PATH]
+    cmds:
+      - cmd: '{{if ne .KUBE_CONTEXT ""}}kubectl config use-context "{{.KUBE_CONTEXT}}"{{else}}echo Using current kubectl context{{end}}'
+      - cmd: >-
+          rad workspace create kubernetes "{{.WORKSPACE}}" --force{{if ne .KUBE_CONTEXT ""}} --context "{{.KUBE_CONTEXT}}"{{end}}
+      - cmd: >-
+          {{if eq .SKIP_RADIUS_INSTALL "true"}}echo Skipping rad install (SKIP_RADIUS_INSTALL=true){{else}}rad install kubernetes{{if eq .REINSTALL_RADIUS "true"}} --reinstall{{end}}{{end}}
+      - cmd: >-
+          {{if eq .SKIP_AZURE_CREDENTIAL "true"}}echo Skipping Azure credential register (SKIP_AZURE_CREDENTIAL=true){{else}}rad credential register azure sp --client-id "{{.AZURE_CLIENT_ID}}" --client-secret "{{.AZURE_CLIENT_SECRET}}" --tenant-id "{{.AZURE_TENANT_ID}}" --workspace "{{.WORKSPACE}}"{{end}}
+      - rad group create retail --workspace "{{.WORKSPACE}}"
+      - cmd: >-
+          {{if eq .SKIP_RESOURCE_TYPE "true"}}echo Skipping resource type register (SKIP_RESOURCE_TYPE=true){{else}}rad resource-type create postgreSqlDatabases --from-file "./radius/resource-types/postgreSqlDatabases.yaml" --workspace "{{.WORKSPACE}}"{{end}}
+      - cmd: >-
+          rad deploy "./radius/bicep/retail-local/env.bicep" --workspace "{{.WORKSPACE}}" --group retail
+          --parameters azureScope="{{.RETAIL_AZURE_SCOPE}}"
+          --parameters postgresRecipeTemplatePath="{{.POSTGRES_RECIPE_TEMPLATE_PATH}}"
+      - cmd: >-
+          rad deploy "./radius/bicep/retail-local/app.bicep" --workspace "{{.WORKSPACE}}" --group retail
+          --parameters environment="retail-{{.STAGE}}"
+          --parameters image="{{.IMAGE}}"
+          --parameters containerPort={{.CONTAINER_PORT}}
+
+  deploy:operations:
+    desc: Deploy Operations environment + app (ACI)
+    summary: |
+      Requires OPERATIONS_ACI_RG_ID and POSTGRES_RECIPE_TEMPLATE_PATH.
+
+      Example:
+        task deploy:operations OPERATIONS_ACI_RG_ID="/subscriptions/<subId>/resourceGroups/operations"
+    requires:
+      vars: [OPERATIONS_ACI_RG_ID, POSTGRES_RECIPE_TEMPLATE_PATH]
+    cmds:
+      - cmd: '{{if ne .KUBE_CONTEXT ""}}kubectl config use-context "{{.KUBE_CONTEXT}}"{{else}}echo Using current kubectl context{{end}}'
+      - cmd: >-
+          rad workspace create kubernetes "{{.WORKSPACE}}" --force{{if ne .KUBE_CONTEXT ""}} --context "{{.KUBE_CONTEXT}}"{{end}}
+      - cmd: >-
+          {{if eq .SKIP_RADIUS_INSTALL "true"}}echo Skipping rad install (SKIP_RADIUS_INSTALL=true){{else}}rad install kubernetes{{if eq .REINSTALL_RADIUS "true"}} --reinstall{{end}}{{end}}
+      - cmd: >-
+          {{if eq .SKIP_AZURE_CREDENTIAL "true"}}echo Skipping Azure credential register (SKIP_AZURE_CREDENTIAL=true){{else}}rad credential register azure sp --client-id "{{.AZURE_CLIENT_ID}}" --client-secret "{{.AZURE_CLIENT_SECRET}}" --tenant-id "{{.AZURE_TENANT_ID}}" --workspace "{{.WORKSPACE}}"{{end}}
+      - rad group create operations --workspace "{{.WORKSPACE}}"
+      - cmd: >-
+          {{if eq .SKIP_RESOURCE_TYPE "true"}}echo Skipping resource type register (SKIP_RESOURCE_TYPE=true){{else}}rad resource-type create postgreSqlDatabases --from-file "./radius/resource-types/postgreSqlDatabases.yaml" --workspace "{{.WORKSPACE}}"{{end}}
+      - cmd: >-
+          rad deploy "./radius/bicep/operations-aci/env.bicep" --workspace "{{.WORKSPACE}}" --group operations
+          --parameters aciResourceGroupId="{{.OPERATIONS_ACI_RG_ID}}"
+          --parameters postgresRecipeTemplatePath="{{.POSTGRES_RECIPE_TEMPLATE_PATH}}"
+      - cmd: >-
+          rad deploy "./radius/bicep/operations-aci/app.bicep" --workspace "{{.WORKSPACE}}" --group operations
+          --parameters environment="operations-{{.STAGE}}"
+          --parameters image="{{.IMAGE}}"
+          --parameters containerPort={{.CONTAINER_PORT}}
+
+  # Convenience tasks for the CHALLENGE.md stage matrix
+  deploy:commercial:dev:
+    desc: Deploy Commercial dev
+    cmds:
+      - task: deploy:commercial
+        vars: { STAGE: dev }
+
+  deploy:commercial:test:
+    desc: Deploy Commercial test
+    cmds:
+      - task: deploy:commercial
+        vars: { STAGE: test }
+
+  deploy:commercial:prod:
+    desc: Deploy Commercial prod
+    cmds:
+      - task: deploy:commercial
+        vars: { STAGE: prod }
+
+  deploy:commercial:all:
+    desc: Deploy Commercial dev/test/prod
+    cmds:
+      - task: deploy:commercial:dev
+      - task: deploy:commercial:test
+      - task: deploy:commercial:prod
+
+  deploy:retail:dev:
+    desc: Deploy Retail dev
+    cmds:
+      - task: deploy:retail
+        vars: { STAGE: dev }
+
+  deploy:retail:test:
+    desc: Deploy Retail test
+    cmds:
+      - task: deploy:retail
+        vars: { STAGE: test }
+
+  deploy:retail:prod:
+    desc: Deploy Retail prod
+    cmds:
+      - task: deploy:retail
+        vars: { STAGE: prod }
+
+  deploy:retail:all:
+    desc: Deploy Retail dev/test/prod
+    cmds:
+      - task: deploy:retail:dev
+      - task: deploy:retail:test
+      - task: deploy:retail:prod
+
+  deploy:operations:dev:
+    desc: Deploy Operations dev (ACI)
+    cmds:
+      - task: deploy:operations
+        vars: { STAGE: dev }
+
+  deploy:operations:test:
+    desc: Deploy Operations test (ACI)
+    cmds:
+      - task: deploy:operations
+        vars: { STAGE: test }
+
+  deploy:operations:prod:
+    desc: Deploy Operations prod (ACI)
+    cmds:
+      - task: deploy:operations
+        vars: { STAGE: prod }
+
+  deploy:operations:all:
+    desc: Deploy Operations dev/test/prod (ACI)
+    cmds:
+      - task: deploy:operations:dev
+      - task: deploy:operations:test
+      - task: deploy:operations:prod
+
+  status:*:
+    desc: Show Radius app status for a business unit (commercial|retail|operations)
+    vars:
+      BU: "{{index .MATCH 0}}"
+    cmds:
+      - rad app status --workspace {{.WORKSPACE}} --group {{.BU}}
+
+  cleanup:*:
+    desc: Cleanup a business unit (commercial|retail|operations)
+    prompt: This will delete the app, group, and workspace. Continue?
+    vars:
+      BU: "{{index .MATCH 0}}"
+    cmds:
+      - rad app delete "{{.APP_NAME}}" --group "{{.BU}}" --workspace "{{.WORKSPACE}}" --yes
+      - rad group delete "{{.BU}}" --workspace "{{.WORKSPACE}}" --yes
+      - rad workspace delete "{{.WORKSPACE}}" --yes
