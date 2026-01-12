@@ -54,13 +54,13 @@ This demo requires Azure resource groups and a Service Principal with permission
 Recommended one-time setup (Taskfile):
 
 ```bash
-task azure:bootstrap SUBSCRIPTION_ID=<subId>
+task azure:bootstrap
 ```
 
 Optional: also create a simple AKS cluster for the Commercial (Kubernetes on Azure) scenario:
 
 ```bash
-task azure:bootstrap SUBSCRIPTION_ID=<subId> CREATE_AKS=true
+task azure:bootstrap CREATE_AKS=true
 ```
 
 This will (idempotently):
@@ -71,7 +71,7 @@ This will (idempotently):
 Create the Service Principal separately (recommended so you intentionally capture the secret output):
 
 ```bash
-task azure:sp:create SUBSCRIPTION_ID=<subId>
+task azure:sp:create
 ```
 
 When `CREATE_AKS=true` is set, it also:
@@ -80,7 +80,7 @@ When `CREATE_AKS=true` is set, it also:
 - Creates an AKS cluster (default name `radius-demo-aks` in the `commercial` RG)
 - Fetches kubeconfig via `az aks get-credentials` (can be disabled with `GET_AKS_CREDENTIALS=false`)
 
-If you can’t create service principals or role assignments in your tenant, ask an admin to provide you:
+If you can't create service principals or role assignments in your tenant, ask an admin to provide you:
 
 - `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`
 - Contributor (or equivalent) permissions on the required resource groups

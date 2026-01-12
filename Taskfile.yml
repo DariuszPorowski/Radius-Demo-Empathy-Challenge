@@ -40,7 +40,8 @@ vars:
     "./radius/recipes/azure/postgresql-flex/terraform"}}
 
   # Azure bootstrap defaults.
-  SUBSCRIPTION_ID: '{{.SUBSCRIPTION_ID | default ""}}'
+  SUBSCRIPTION_ID:
+    sh: az account show --output tsv --query id
   RG_LOCATION: '{{.RG_LOCATION | default "eastus"}}'
   SP_NAME: '{{.SP_NAME | default "radius-demo-sp"}}'
   ROLE: '{{.ROLE | default "Contributor"}}'
@@ -81,8 +82,8 @@ tasks:
       Creates Azure prerequisites for this demo.
 
       Examples:
-        task azure:bootstrap SUBSCRIPTION_ID=<subId>
-        task azure:bootstrap SUBSCRIPTION_ID=<subId> CREATE_AKS=true
+        task azure:bootstrap
+        task azure:bootstrap CREATE_AKS=true
 
       Variables (can come from .env):
         SUBSCRIPTION_ID, RG_LOCATION, SP_NAME, ROLE, CREATE_AKS
@@ -120,7 +121,7 @@ tasks:
         SUBSCRIPTION_ID
 
       Example:
-        task azure:sp:create SUBSCRIPTION_ID=<subId>
+        task azure:sp:create
     requires:
       vars: [SUBSCRIPTION_ID]
     cmds:
