@@ -36,6 +36,7 @@ if (-not $SkipPowerShellParse) {
         (Join-Path $repoRoot 'scripts\deploy-aci.ps1'),
         (Join-Path $repoRoot 'scripts\cleanup.ps1'),
         (Join-Path $repoRoot 'scripts\cleanup-aci.ps1'),
+        (Join-Path $repoRoot 'scripts\azure-bootstrap.ps1'),
         (Join-Path $repoRoot 'scripts\sanity-check.ps1')
     )
 

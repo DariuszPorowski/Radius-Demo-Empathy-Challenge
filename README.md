@@ -33,6 +33,44 @@ You need:
 
 ## One-time inputs you must provide
 
+## One-time Azure bootstrap (recommended)
+
+This demo requires Azure resource groups and a Service Principal with permission to create:
+
+- Azure PostgreSQL Flexible Server (via the Terraform recipe)
+- Azure Container Instances (for the Operations/ACI extra credit)
+
+Recommended one-time setup script:
+
+Windows PowerShell:
+
+```powershell
+./scripts/azure-bootstrap.ps1 -SubscriptionId "<subId>"
+```
+
+Optional: also create a simple AKS cluster for the Commercial (Kubernetes on Azure) scenario:
+
+```powershell
+./scripts/azure-bootstrap.ps1 -SubscriptionId "<subId>" -CreateAks
+```
+
+This will (idempotently):
+
+- Register required resource providers: `Microsoft.DBforPostgreSQL`, `Microsoft.ContainerInstance`
+- Create resource groups: `commercial`, `retail`, `operations`
+- Create a Service Principal and assign `Contributor` on those resource groups
+
+When `-CreateAks` is set, it also:
+
+- Registers `Microsoft.ContainerService`
+- Creates an AKS cluster (default name `radius-demo-aks` in the `commercial` RG)
+- Fetches kubeconfig via `az aks get-credentials`
+
+If you can’t create service principals or role assignments in your tenant, run with `-SkipServicePrincipal` and ask an admin to provide you:
+
+- `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`
+- Contributor (or equivalent) permissions on the required resource groups
+
 ### 1) Azure Service Principal env vars
 
 The deployment script reads these from environment variables by default:
