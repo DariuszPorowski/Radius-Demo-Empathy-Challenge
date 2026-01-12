@@ -100,10 +100,10 @@ tasks:
       - az group create --name retail --location "{{.RG_LOCATION}}" -o none
       - az group create --name operations --location "{{.RG_LOCATION}}" -o none
       - cmd: >-
-          {{if eq .CREATE_AKS "true"}}az aks create --name "{{.AKS_CLUSTER_NAME}}" --resource-group commercial --location "{{.RG_LOCATION}}" --node-count {{.AKS_NODE_COUNT}} --node-vm-size "{{.AKS_NODE_VM_SIZE}}" --generate-ssh-keys --enable-managed-identity -o none{{else}}echo Skipping AKS (set CREATE_AKS=true to enable){{end}}
+          {{if eq .CREATE_AKS "true"}}az aks create --name "{{.AKS_CLUSTER_NAME}}" --resource-group commercial --location "{{.RG_LOCATION}}" --node-count {{.AKS_NODE_COUNT}} --node-vm-size "{{.AKS_NODE_VM_SIZE}}" --generate-ssh-keys --enable-managed-identity -o none{{else}}echo "Skipping AKS (set CREATE_AKS=true to enable)"{{end}}
         ignore_error: true
       - cmd: >-
-          {{if and (eq .CREATE_AKS "true") (eq .GET_AKS_CREDENTIALS "true")}}az aks get-credentials --name "{{.AKS_CLUSTER_NAME}}" --resource-group commercial --overwrite-existing{{else}}echo Skipping AKS kubeconfig (set GET_AKS_CREDENTIALS=true){{end}}
+          {{if and (eq .CREATE_AKS "true") (eq .GET_AKS_CREDENTIALS "true")}}az aks get-credentials --name "{{.AKS_CLUSTER_NAME}}" --resource-group commercial --overwrite-existing{{else}}echo "Skipping AKS kubeconfig (set GET_AKS_CREDENTIALS=true)"{{end}}
         ignore_error: true
       - cmd: >-
           echo Commercial AzureScope:     /subscriptions/{{.SUBSCRIPTION_ID}}/resourceGroups/commercial
