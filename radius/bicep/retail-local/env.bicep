@@ -1,4 +1,3 @@
-extension radius
 
 @description('Azure scope used for the Radius Azure provider (resource group ID). This is required to provision the PostgreSQL database via the Azure Terraform recipe even though compute is local Kubernetes.')
 param azureScope string

@@ -21,8 +21,8 @@ resource db 'Radius.Data/postgreSqlDatabases@2025-08-01-preview' = {
   name: 'postgres'
   location: 'global'
   properties: {
-    environment: environment
     application: app.id
+    environment: environment
   }
 }
 

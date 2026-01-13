@@ -12,7 +12,6 @@ param containerPort int = 3000
 module app '../modules/app-kubernetes.bicep' = {
   params: {
     environment: environment
-    kubernetesNamespace: environment
     image: image
     containerPort: containerPort
   }

@@ -1,4 +1,3 @@
-extension radius
 
 @description('Azure scope used for the Radius Azure provider (resource group ID). Example: /subscriptions/<subId>/resourceGroups/<rgName>')
 param azureScope string

@@ -1,4 +1,3 @@
-extension radius
 
 @description('Azure resource group ID where ACI infrastructure/resources will be provisioned. Example: /subscriptions/<subId>/resourceGroups/<rgName>')
 param aciResourceGroupId string

@@ -1,10 +1,7 @@
 extension radius
 
-@description('The Radius environment to deploy to (e.g. commercial-dev).')
+@description('The Radius environment ID to deploy to.')
 param environment string
-
-@description('Kubernetes namespace extension value for the application (often same as environment).')
-param kubernetesNamespace string
 
 @description('Container image for the Todo app.')
 param image string = 'ghcr.io/radius-project/samples/demo:latest'
@@ -17,12 +14,6 @@ resource app 'Applications.Core/applications@2023-10-01-preview' = {
   location: 'global'
   properties: {
     environment: environment
-    extensions: [
-      {
-        kind: 'kubernetesNamespace'
-        namespace: kubernetesNamespace
-      }
-    ]
   }
 }
 
@@ -30,8 +21,8 @@ resource db 'Radius.Data/postgreSqlDatabases@2025-08-01-preview' = {
   name: 'postgres'
   location: 'global'
   properties: {
-    environment: environment
     application: app.id
+    environment: environment
   }
 }
 
