@@ -7,7 +7,7 @@ param azureScope string
 param postgresRecipeTemplatePath string
 
 @description('Azure location for the PostgreSQL Flexible Server (passed to the Terraform recipe).')
-param postgresLocation string = 'eastus'
+param postgresLocation string = 'eastus2'
 
 @description('Demo convenience. When true, the Terraform recipe will create an allow-all firewall rule.')
 param postgresAllowPublicAccess bool = true

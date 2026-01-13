@@ -42,7 +42,7 @@ vars:
   # Azure bootstrap defaults.
   SUBSCRIPTION_ID:
     sh: az account show --output tsv --query id
-  RG_LOCATION: '{{.RG_LOCATION | default "eastus"}}'
+  RG_LOCATION: '{{.RG_LOCATION | default "eastus2"}}'
   SP_NAME: '{{.SP_NAME | default "radius-demo-sp"}}'
   ROLE: '{{.ROLE | default "Contributor"}}'
   CREATE_AKS: '{{.CREATE_AKS | default "false"}}'
